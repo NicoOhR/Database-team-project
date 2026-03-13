@@ -63,6 +63,8 @@ The script uses LOAD DATA LOCAL INFILE to load the CSV data into the tables.
 
 ## Project Structure
 
+## Project Structure
+
 ```text
 CS4347-Airline-Database/
 ├── project_script.sql
@@ -78,12 +80,14 @@ CS4347-Airline-Database/
     ├── FARE.csv
     └── SEAT.csv
 ```
+
 ## Notes
 
 - This repository contains Milestone 1 only.
 - Future milestones will include additional constraints and queries.
 
-## Team Name: Dubnium
+## Team Name
+Dubnium
 
 ## Team Members
 
