@@ -77,6 +77,7 @@ CS4347-Airline-Database/
     ├── LEG_INSTANCE.csv
     ├── FARE.csv
     └── SEAT.csv
+```
 ## Notes
 
 - This repository contains Milestone 1 only.
