@@ -61,21 +61,22 @@ The script uses LOAD DATA LOCAL INFILE to load the CSV data into the tables.
 
 ## Project Structure
 
-CS4347-Airline-Database
-│
+## Project Structure
+
+```text
+CS4347-Airline-Database/
 ├── project_script.sql
 ├── README.md
-├── data/
-│   ├── AIRPORT.csv
-│   ├── AIRPLANE_TYPE.csv
-│   ├── AIRPLANE.csv
-│   ├── CAN_LAND.csv
-│   ├── FLIGHT.csv
-│   ├── FLIGHT_LEG.csv
-│   ├── LEG_INSTANCE.csv
-│   ├── FARE.csv
-│   └── SEAT.csv
-
+└── data/
+    ├── AIRPORT.csv
+    ├── AIRPLANE_TYPE.csv
+    ├── AIRPLANE.csv
+    ├── CAN_LAND.csv
+    ├── FLIGHT.csv
+    ├── FLIGHT_LEG.csv
+    ├── LEG_INSTANCE.csv
+    ├── FARE.csv
+    └── SEAT.csv
 ## Notes
 
 - This repository contains Milestone 1 only.
