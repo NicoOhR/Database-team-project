@@ -61,10 +61,6 @@ The script uses LOAD DATA LOCAL INFILE to load the CSV data into the tables.
 
 ## Project Structure
 
-## Project Structure
-
-## Project Structure
-
 ```text
 CS4347-Airline-Database/
 ├── project_script.sql
