@@ -174,9 +174,8 @@ The password is requested securely at runtime and is not stored in the code or i
 **Team Name:** Dubnium
 
 **Team Members:**
-
--Nimrod Ohayon Rozanes
--Ali Mohammed
--Kourosh Torkaman Sohrabi
--Yael Roldan Rico
--Ethan John Bickel
+- Nimrod Ohayon Rozanes
+- Ali Mohammed
+- Kourosh Torkaman Sohrabi
+- Yael Roldan Rico
+- Ethan John Bickel
