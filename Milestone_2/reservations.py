@@ -2,8 +2,9 @@
 
 Important schema note:
 The final database follows the textbook structure more closely, so there is no
-separate RESERVATION table. Instead, SEAT stores one booked seat per
-(Flight_number, Leg_no, Date, Seat_no).
+separate RESERVATION table. Instead:
+- AIRPLANE_SEAT stores the valid seat layout for each airplane
+- SEAT stores one booked seat per (Flight_number, Leg_no, Date, Seat_no)
 
 That means:
 - making a reservation inserts into SEAT
@@ -16,7 +17,34 @@ from __future__ import annotations
 from mysql.connector import Error
 
 from db import get_cursor
-from queries import flight_exists, leg_exists, leg_instance_exists, seat_is_booked
+from queries import flight_exists, leg_exists
+
+
+def _get_locked_leg_instance(cursor, flight_number: str, leg_no: int, date_str: str):
+    """Return the leg instance row and lock it for the current transaction."""
+    cursor.execute(
+        """
+        SELECT No_of_avail_seats, Airplane_id
+        FROM LEG_INSTANCE
+        WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+        FOR UPDATE
+        """,
+        (flight_number, leg_no, date_str),
+    )
+    return cursor.fetchone()
+
+
+def _seat_exists_on_airplane(cursor, airplane_id: str, seat_no: str) -> bool:
+    """Return True if the seat number exists on the assigned airplane."""
+    cursor.execute(
+        """
+        SELECT 1 AS found
+        FROM AIRPLANE_SEAT
+        WHERE Airplane_id = %s AND Seat_no = %s
+        """,
+        (airplane_id, seat_no),
+    )
+    return cursor.fetchone() is not None
 
 
 def make_reservation(
@@ -33,19 +61,19 @@ def make_reservation(
     1. flight must exist
     2. leg must exist for the flight
     3. leg instance must exist for that date
-    4. No_of_avail_seats must be greater than zero
-    5. the requested seat number must not already be booked for that leg instance
-
-    Educational note:
-    Because the schema no longer includes airplane seat inventory,
-    this function only validates duplicate seat booking for the same leg instance.
-    It does not validate whether a seat number belongs to a specific airplane layout.
+    4. seat number must exist on the airplane assigned to that leg instance
+    5. No_of_avail_seats must be greater than zero
+    6. the requested seat number must not already be booked for that leg instance
     """
-    if not customer_name.strip():
+    seat_no = seat_no.strip().upper()
+    customer_name = customer_name.strip()
+    cphone = cphone.strip()
+
+    if not customer_name:
         return False, "Customer name cannot be empty."
-    if not cphone.strip():
+    if not cphone:
         return False, "Phone number cannot be empty."
-    if not seat_no.strip():
+    if not seat_no:
         return False, "Seat number cannot be empty."
 
     try:
@@ -53,28 +81,36 @@ def make_reservation(
             return False, f"Flight number {flight_number} does not exist."
         if not leg_exists(flight_number, leg_no):
             return False, f"Leg number {leg_no} does not exist for flight {flight_number}."
-        if not leg_instance_exists(flight_number, leg_no, date_str):
-            return False, f"No leg instance found for flight {flight_number}, leg {leg_no}, date {date_str}."
-        if seat_is_booked(flight_number, leg_no, date_str, seat_no):
-            return False, f"Seat {seat_no} is already booked for that leg instance."
 
         with get_cursor() as (conn, cursor):
-            # Lock the leg instance row before updating available seats.
+            leg_instance = _get_locked_leg_instance(cursor, flight_number, leg_no, date_str)
+            if leg_instance is None:
+                conn.rollback()
+                return False, (
+                    f"No leg instance found for flight {flight_number}, "
+                    f"leg {leg_no}, date {date_str}."
+                )
+
+            if not _seat_exists_on_airplane(cursor, leg_instance["Airplane_id"], seat_no):
+                conn.rollback()
+                return False, (
+                    f"Seat {seat_no} does not exist on airplane "
+                    f"{leg_instance['Airplane_id']} for that leg instance."
+                )
+
             cursor.execute(
                 """
-                SELECT No_of_avail_seats
-                FROM LEG_INSTANCE
-                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
-                FOR UPDATE
+                SELECT 1 AS found
+                FROM SEAT
+                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s AND Seat_no = %s
                 """,
-                (flight_number, leg_no, date_str),
+                (flight_number, leg_no, date_str, seat_no),
             )
-            row = cursor.fetchone()
-            if row is None:
+            if cursor.fetchone() is not None:
                 conn.rollback()
-                return False, "Leg instance no longer exists."
+                return False, f"Seat {seat_no} is already booked for that leg instance."
 
-            remaining = row["No_of_avail_seats"]
+            remaining = leg_instance["No_of_avail_seats"]
             if remaining is None or remaining <= 0:
                 conn.rollback()
                 return False, "No seats are currently available for this leg instance."
@@ -84,7 +120,7 @@ def make_reservation(
                 INSERT INTO SEAT (Flight_number, Leg_no, Date, Seat_no, Customer_name, Cphone)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (flight_number, leg_no, date_str, seat_no, customer_name.strip(), cphone.strip()),
+                (flight_number, leg_no, date_str, seat_no, customer_name, cphone),
             )
 
             cursor.execute(
@@ -98,7 +134,7 @@ def make_reservation(
             conn.commit()
 
         return True, (
-            f"Reservation created successfully for {customer_name.strip()} "
+            f"Reservation created successfully for {customer_name} "
             f"on flight {flight_number}, leg {leg_no}, date {date_str}, seat {seat_no}."
         )
     except Error as exc:
@@ -112,7 +148,9 @@ def cancel_reservation(
     seat_no: str,
 ) -> tuple[bool, str]:
     """Cancel a reservation by deleting a row from SEAT and restoring one seat."""
-    if not seat_no.strip():
+    seat_no = seat_no.strip().upper()
+
+    if not seat_no:
         return False, "Seat number cannot be empty."
 
     try:
@@ -120,12 +158,16 @@ def cancel_reservation(
             return False, f"Flight number {flight_number} does not exist."
         if not leg_exists(flight_number, leg_no):
             return False, f"Leg number {leg_no} does not exist for flight {flight_number}."
-        if not leg_instance_exists(flight_number, leg_no, date_str):
-            return False, f"No leg instance found for flight {flight_number}, leg {leg_no}, date {date_str}."
-        if not seat_is_booked(flight_number, leg_no, date_str, seat_no):
-            return False, f"Seat {seat_no} is not currently booked for that leg instance."
 
         with get_cursor() as (conn, cursor):
+            leg_instance = _get_locked_leg_instance(cursor, flight_number, leg_no, date_str)
+            if leg_instance is None:
+                conn.rollback()
+                return False, (
+                    f"No leg instance found for flight {flight_number}, "
+                    f"leg {leg_no}, date {date_str}."
+                )
+
             cursor.execute(
                 """
                 DELETE FROM SEAT
@@ -133,6 +175,9 @@ def cancel_reservation(
                 """,
                 (flight_number, leg_no, date_str, seat_no),
             )
+            if cursor.rowcount != 1:
+                conn.rollback()
+                return False, f"Seat {seat_no} is not currently booked for that leg instance."
 
             cursor.execute(
                 """

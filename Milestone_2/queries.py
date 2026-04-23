@@ -7,9 +7,10 @@ Note:
 The final SQL schema follows the textbook version of Figure 3.21.
 That means:
 - there is no separate RESERVATION table
+- AIRPLANE_SEAT stores the valid seat layout for each airplane
 - SEAT stores booked seat assignments for a specific leg instance
-- the app can show booked seats and remaining seats, but it does not have a
-  separate airplane-seat inventory table anymore
+- the app can show booked seats and remaining seats without exposing the full
+  seat map in the console
 """
 
 from __future__ import annotations
@@ -145,7 +146,8 @@ def get_leg_instance_detail(flight_number: str, leg_no: int, date_str: str) -> d
 def get_booked_seats(flight_number: str, leg_no: int, date_str: str) -> list[dict[str, Any]]:
     """Return booked seats for a specific leg instance.
 
-    In the schema, SEAT stores seat bookings directly.
+    In the schema, AIRPLANE_SEAT stores valid seat numbers and SEAT stores
+    actual bookings.
     """
     return _fetch_all(
         """
@@ -174,8 +176,8 @@ def seat_is_booked(flight_number: str, leg_no: int, date_str: str, seat_no: str)
 def show_available_seats_summary(flight_number: str, leg_no: int, date_str: str) -> dict[str, Any]:
     """Return a summary for the requested leg instance.
 
-    Because the schema does not include airplane seat inventory,
-    this function reports:
+    AIRPLANE_SEAT stores the valid seat layout for the assigned airplane.
+    This function reports:
     - the LEG_INSTANCE row
     - how many seats are still available (from No_of_avail_seats)
     - which seat numbers are already booked in SEAT
