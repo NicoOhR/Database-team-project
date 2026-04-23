@@ -176,7 +176,8 @@ The password is requested securely at runtime and is not stored in the code or i
 
 **Team Members:**
 
-- Add member name here
-- Add member name here
-- Add member name here
-- Add member name here
+- Nimrod Ohayon Rozanes
+- Ali Mohammed
+- Kourosh Torkaman Sohrabi
+- Yael Roldan Rico
+- Ethan John Bickel
