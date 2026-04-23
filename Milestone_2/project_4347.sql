@@ -81,7 +81,16 @@ CREATE TABLE FARE (
   PRIMARY KEY (Flight_number, Code),
   FOREIGN KEY (Flight_number) REFERENCES FLIGHT(Number)
 );
--- SEAT table intentionally left empty (starts with no reservations)
+
+CREATE TABLE AIRPLANE_SEAT (
+  Airplane_id VARCHAR(20) NOT NULL,
+  Seat_no VARCHAR(5) NOT NULL,
+  Seat_class VARCHAR(20),
+  PRIMARY KEY (Airplane_id, Seat_no),
+  FOREIGN KEY (Airplane_id) REFERENCES AIRPLANE(Airplane_id)
+);
+
+-- SEAT stores booked seats for a specific leg instance and starts empty.
 CREATE TABLE SEAT (
   Flight_number VARCHAR(10) NOT NULL,
   Leg_no INT NOT NULL,
@@ -115,6 +124,13 @@ FIELDS TERMINATED BY ',' ENCLOSED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES;
 
+LOAD DATA LOCAL INFILE 'data/SEAT.csv'
+INTO TABLE AIRPLANE_SEAT
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(Airplane_id, Seat_no, Seat_class);
+
 LOAD DATA LOCAL INFILE 'data/CAN_LAND.csv'
 INTO TABLE CAN_LAND
 FIELDS TERMINATED BY ',' ENCLOSED BY '"'
@@ -145,3 +161,7 @@ FIELDS TERMINATED BY ',' ENCLOSED BY '"'
 LINES TERMINATED BY '\n'
 IGNORE 1 LINES;
 
+-- The booking table starts empty, so remaining capacity should match airplane capacity.
+UPDATE LEG_INSTANCE li
+JOIN AIRPLANE a ON a.Airplane_id = li.Airplane_id
+SET li.No_of_avail_seats = a.Total_no_of_seats;

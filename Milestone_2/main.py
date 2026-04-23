@@ -135,8 +135,8 @@ def handle_show_available_seats() -> None:
     """
     Show the selected leg instance plus booked seat records.
 
-    In the schema, SEAT stores booked seats for a leg instance,
-    not the full airplane seat map.
+    AIRPLANE_SEAT stores the valid seat layout for the assigned airplane,
+    while SEAT stores the booked seats for this leg instance.
     """
     flight_number = input("Flight number: ").strip()
     leg_raw = input("Leg number: ").strip()
@@ -168,8 +168,8 @@ def handle_show_available_seats() -> None:
         print("No booked seats recorded yet for this leg instance.")
 
     print(
-        "note: in the schema, SEAT stores booked seat "
-        "records for a leg instance. It does not store the full airplane seat map."
+        "note: AIRPLANE_SEAT stores valid seat numbers for the assigned airplane, "
+        "and SEAT stores the booked seat records for this leg instance."
     )
 
 

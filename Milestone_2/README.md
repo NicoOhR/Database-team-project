@@ -1,4 +1,3 @@
-
 # Milestone 2 - Airport Management System
 
 **Course:** CS 4347 – Database Systems
@@ -14,7 +13,7 @@ The project includes:
 - a MySQL schema and data-loading script
 - a console-based Python application
 - query features for flights, legs, fares, and leg instances
-- reservation-related application logic
+- reservation-related application logic with seat-layout validation
 
 ---
 
@@ -41,6 +40,7 @@ project/
     ├── AIRPORT.csv
     ├── AIRPLANE_TYPE.csv
     ├── AIRPLANE.csv
+    ├── SEAT.csv
     ├── CAN_LAND.csv
     ├── FLIGHT.csv
     ├── FLIGHT_LEG.csv
@@ -165,7 +165,8 @@ The password is requested securely at runtime and is not stored in the code or i
 - Keep the data/ folder in the same directory as `project_4347.sql`
 - Make sure `local_infile` is enabled if CSV imports fail
 - Use valid flight numbers when testing application features
-- In the current database setup, the `SEAT` table starts empty
+- `data/SEAT.csv` is loaded into `AIRPLANE_SEAT`, which stores the valid seat layout for each airplane
+- The booking table `SEAT` starts empty, so the SQL load script resets `LEG_INSTANCE.No_of_avail_seats` to full airplane capacity
 
 ---
 
@@ -174,8 +175,8 @@ The password is requested securely at runtime and is not stored in the code or i
 **Team Name:** Dubnium
 
 **Team Members:**
-- Nimrod Ohayon Rozanes
-- Ali Mohammed
-- Kourosh Torkaman Sohrabi
-- Yael Roldan Rico
-- Ethan John Bickel
+
+- Add member name here
+- Add member name here
+- Add member name here
+- Add member name here
