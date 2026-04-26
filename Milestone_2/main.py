@@ -1,7 +1,8 @@
 """Console host application for CS 4347 Milestone 2.
 
-This script is intentionally simple and heavily commented so it is easy to
-learn from, demo, and modify as a team.
+Milestone 2 focuses on host application logic rather than a GUI, so this
+module intentionally provides a menu-driven console interface for exercising
+the SQL database.
 
 Menu layout:
 1. Test database connection
@@ -18,6 +19,8 @@ Menu layout:
 from __future__ import annotations
 
 from datetime import datetime
+
+from mysql.connector import Error
 
 from db import prompt_for_password, test_connection
 from queries import (
@@ -39,6 +42,7 @@ from reservations import (
 )
 
 RETURN_TO_MENU = object()
+RETRY_OR_MENU_MESSAGE = "Try again or press m for menu."
 
 
 def _is_main_menu_request(value: str) -> bool:
@@ -48,10 +52,21 @@ def _is_main_menu_request(value: str) -> bool:
 
 def prompt_text_or_menu(label: str):
     """Prompt for text input while allowing a main-menu return."""
-    value = input(f"{label} or m for main menu: ").strip()
+    value = input(f"{label} or m for menu: ").strip()
     if _is_main_menu_request(value):
         return RETURN_TO_MENU
     return value
+
+
+def prompt_required_text_or_menu(label: str):
+    """Prompt until a non-empty value is entered or the user returns to menu."""
+    while True:
+        value = prompt_text_or_menu(label)
+        if value is RETURN_TO_MENU:
+            return RETURN_TO_MENU
+        if value:
+            return value
+        print(f"{label} cannot be empty. {RETRY_OR_MENU_MESSAGE}")
 
 
 def prompt_valid_customer_phone():
@@ -65,7 +80,7 @@ def prompt_valid_customer_phone():
         if ok:
             return result
 
-        print(f"{result} Try again or press m for main menu.")
+        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
 
 
 def prompt_valid_customer_name():
@@ -79,7 +94,7 @@ def prompt_valid_customer_name():
         if ok:
             return result
 
-        print(f"{result} Try again or press m for main menu.")
+        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
 
 
 def prompt_valid_reservation_seat(flight_number: str, leg_no: int, date_str: str):
@@ -93,20 +108,28 @@ def prompt_valid_reservation_seat(flight_number: str, leg_no: int, date_str: str
         if ok:
             return result
 
-        print(f"{result} Try again or press m for main menu.")
+        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
+
+
+def _return_to_menu_on_lookup_error(label: str, exc: Error):
+    """Report a database lookup error and return the user to the main menu."""
+    print(f"Database error while checking {label}: {exc}")
+    print("Returning to the main menu.")
+    return RETURN_TO_MENU
 
 
 def prompt_valid_flight_number():
     """Prompt until the user enters a valid flight number or returns to menu."""
     while True:
-        flight_number = input("Flight number or m for main menu: ").strip()
-        if not flight_number:
-            print("Flight number cannot be empty.")
-            continue
-        if _is_main_menu_request(flight_number):
+        flight_number = prompt_required_text_or_menu("Flight number")
+        if flight_number is RETURN_TO_MENU:
             return RETURN_TO_MENU
-        if not flight_exists(flight_number):
-            print(f"Flight number {flight_number} does not exist.")
+        try:
+            exists = flight_exists(flight_number)
+        except Error as exc:
+            return _return_to_menu_on_lookup_error("flight number", exc)
+        if not exists:
+            print(f"Flight number {flight_number} does not exist. {RETRY_OR_MENU_MESSAGE}")
             continue
         return flight_number
 
@@ -114,21 +137,22 @@ def prompt_valid_flight_number():
 def prompt_valid_leg_number(flight_number: str):
     """Prompt until the user enters a valid leg number for a flight."""
     while True:
-        leg_raw = input("Leg number or m for main menu: ").strip()
-        if not leg_raw:
-            print("Leg number cannot be empty.")
-            continue
-        if _is_main_menu_request(leg_raw):
+        leg_raw = prompt_required_text_or_menu("Leg number")
+        if leg_raw is RETURN_TO_MENU:
             return RETURN_TO_MENU
         if not leg_raw.isdigit():
-            print("Leg number must be a whole number. Try again or press m for main menu.")
+            print(f"Leg number must be a whole number. {RETRY_OR_MENU_MESSAGE}")
             continue
 
         leg_no = int(leg_raw)
-        if not leg_exists(flight_number, leg_no):
+        try:
+            exists = leg_exists(flight_number, leg_no)
+        except Error as exc:
+            return _return_to_menu_on_lookup_error("leg number", exc)
+        if not exists:
             print(
                 f"Leg number {leg_no} does not exist for flight {flight_number}. "
-                "Try again or press m for main menu."
+                f"{RETRY_OR_MENU_MESSAGE}"
             )
             continue
         return leg_no
@@ -137,20 +161,24 @@ def prompt_valid_leg_number(flight_number: str):
 def prompt_optional_leg_number(flight_number: str):
     """Prompt for an optional leg number while allowing a main-menu return."""
     while True:
-        leg_raw = input("Optional leg number, m for main menu, or press Enter to skip: ").strip()
+        leg_raw = input("Optional leg number, m for menu, or press Enter to skip: ").strip()
         if not leg_raw:
             return None
         if _is_main_menu_request(leg_raw):
             return RETURN_TO_MENU
         if not leg_raw.isdigit():
-            print("Leg number must be a whole number. Try again or press m for main menu.")
+            print(f"Leg number must be a whole number. {RETRY_OR_MENU_MESSAGE}")
             continue
 
         leg_no = int(leg_raw)
-        if not leg_exists(flight_number, leg_no):
+        try:
+            exists = leg_exists(flight_number, leg_no)
+        except Error as exc:
+            return _return_to_menu_on_lookup_error("leg number", exc)
+        if not exists:
             print(
                 f"Leg number {leg_no} does not exist for flight {flight_number}. "
-                "Try again or press m for main menu."
+                f"{RETRY_OR_MENU_MESSAGE}"
             )
             continue
         return leg_no
@@ -159,19 +187,23 @@ def prompt_optional_leg_number(flight_number: str):
 def prompt_valid_date_for_leg_instance(flight_number: str, leg_no: int):
     """Prompt for a valid date and confirm the selected leg instance exists."""
     while True:
-        date_str = input("Date (YYYY-MM-DD) or m for main menu: ").strip()
-        if _is_main_menu_request(date_str):
+        date_str = prompt_required_text_or_menu("Date (YYYY-MM-DD)")
+        if date_str is RETURN_TO_MENU:
             return RETURN_TO_MENU
         try:
             datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
-            print("Invalid date format. Please enter YYYY-MM-DD or press m to return to the main menu.")
+            print(f"Invalid date format. Please enter YYYY-MM-DD. {RETRY_OR_MENU_MESSAGE}")
             continue
 
-        if not leg_instance_exists(flight_number, leg_no, date_str):
+        try:
+            exists = leg_instance_exists(flight_number, leg_no, date_str)
+        except Error as exc:
+            return _return_to_menu_on_lookup_error("leg instance date", exc)
+        if not exists:
             print(
                 f"Flight {flight_number} and leg {leg_no} are valid, "
-                f"but no leg instance exists on {date_str}."
+                f"but no leg instance exists on {date_str}. {RETRY_OR_MENU_MESSAGE}"
             )
             continue
         return date_str
