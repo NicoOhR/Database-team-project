@@ -3,14 +3,11 @@
 These functions do not modify the database. They only retrieve information and
 return it in a Python-friendly form.
 
-Note:
-The final SQL schema follows the textbook version of Figure 3.21.
-That means:
-- there is no separate RESERVATION table
-- AIRPLANE_SEAT stores the valid seat layout for each airplane
-- SEAT stores booked seat assignments for a specific leg instance
-- the app can show booked seats and remaining seats without exposing the full
-  seat map in the console
+Design note:
+- the core schema follows Figure 3.21 from the textbook
+- AIRPLANE_SEAT is an auxiliary support table used to validate seat numbers
+- SEAT stores one booked seat assignment for one leg instance, including the
+  reservation details needed by the Milestone 2 host application
 """
 
 from __future__ import annotations
