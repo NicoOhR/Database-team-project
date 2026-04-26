@@ -47,6 +47,123 @@ def _seat_exists_on_airplane(cursor, airplane_id: str, seat_no: str) -> bool:
     return cursor.fetchone() is not None
 
 
+def _sync_available_seat_count(
+    cursor,
+    flight_number: str,
+    leg_no: int,
+    date_str: str,
+    airplane_id: str,
+) -> int:
+    """Recalculate remaining seats from layout seats minus booked seats."""
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS total_seats
+        FROM AIRPLANE_SEAT
+        WHERE Airplane_id = %s
+        """,
+        (airplane_id,),
+    )
+    total_seats = cursor.fetchone()["total_seats"]
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS booked_count
+        FROM SEAT
+        WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+        """,
+        (flight_number, leg_no, date_str),
+    )
+    booked_count = cursor.fetchone()["booked_count"]
+    remaining = total_seats - booked_count
+
+    cursor.execute(
+        """
+        UPDATE LEG_INSTANCE
+        SET No_of_avail_seats = %s
+        WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+        """,
+        (remaining, flight_number, leg_no, date_str),
+    )
+    return remaining
+
+
+def _phone_is_valid(cphone: str) -> bool:
+    """Return True when the phone number is exactly 10 digits."""
+    return cphone.isdigit() and len(cphone) == 10
+
+
+def validate_customer_phone(cphone: str) -> tuple[bool, str]:
+    """Validate and normalize the customer phone number."""
+    cphone = cphone.strip()
+    if not cphone:
+        return False, "Phone number cannot be empty."
+    if not _phone_is_valid(cphone):
+        return False, "Phone number must be exactly 10 digits."
+    return True, cphone
+
+
+def validate_customer_name(customer_name: str) -> tuple[bool, str]:
+    """Validate and normalize the customer name."""
+    customer_name = customer_name.strip()
+    if not customer_name:
+        return False, "Customer name cannot be empty."
+    if not any(char.isalpha() for char in customer_name):
+        return False, "Customer name must include at least one letter."
+    if any(char.isdigit() for char in customer_name):
+        return False, "Customer name cannot contain numbers."
+    return True, customer_name
+
+
+def validate_seat_for_reservation(
+    flight_number: str,
+    leg_no: int,
+    date_str: str,
+    seat_no: str,
+) -> tuple[bool, str]:
+    """Validate and normalize a seat number before reservation details continue."""
+    seat_no = seat_no.strip().upper()
+    if not seat_no:
+        return False, "Seat number cannot be empty."
+
+    try:
+        with get_cursor() as (_conn, cursor):
+            cursor.execute(
+                """
+                SELECT Airplane_id
+                FROM LEG_INSTANCE
+                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+                """,
+                (flight_number, leg_no, date_str),
+            )
+            leg_instance = cursor.fetchone()
+            if leg_instance is None:
+                return False, (
+                    f"No leg instance found for flight {flight_number}, "
+                    f"leg {leg_no}, date {date_str}."
+                )
+
+            if not _seat_exists_on_airplane(cursor, leg_instance["Airplane_id"], seat_no):
+                return False, (
+                    f"Seat {seat_no} does not exist on airplane "
+                    f"{leg_instance['Airplane_id']} for that leg instance."
+                )
+
+            cursor.execute(
+                """
+                SELECT 1 AS found
+                FROM SEAT
+                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s AND Seat_no = %s
+                """,
+                (flight_number, leg_no, date_str, seat_no),
+            )
+            if cursor.fetchone() is not None:
+                return False, f"Seat {seat_no} is already booked for that leg instance."
+    except Error as exc:
+        return False, f"Error validating seat number: {exc}"
+
+    return True, seat_no
+
+
 def make_reservation(
     flight_number: str,
     leg_no: int,
@@ -61,18 +178,23 @@ def make_reservation(
     1. flight must exist
     2. leg must exist for the flight
     3. leg instance must exist for that date
-    4. seat number must exist on the airplane assigned to that leg instance
-    5. No_of_avail_seats must be greater than zero
-    6. the requested seat number must not already be booked for that leg instance
+    4. customer phone must be exactly 10 digits
+    5. seat number must exist on the airplane assigned to that leg instance
+    6. No_of_avail_seats must be greater than zero
+    7. the requested seat number must not already be booked for that leg instance
     """
     seat_no = seat_no.strip().upper()
     customer_name = customer_name.strip()
     cphone = cphone.strip()
 
-    if not customer_name:
-        return False, "Customer name cannot be empty."
-    if not cphone:
-        return False, "Phone number cannot be empty."
+    name_ok, name_result = validate_customer_name(customer_name)
+    if not name_ok:
+        return False, name_result
+    customer_name = name_result
+    phone_ok, phone_result = validate_customer_phone(cphone)
+    if not phone_ok:
+        return False, phone_result
+    cphone = phone_result
     if not seat_no:
         return False, "Seat number cannot be empty."
 
@@ -110,11 +232,6 @@ def make_reservation(
                 conn.rollback()
                 return False, f"Seat {seat_no} is already booked for that leg instance."
 
-            remaining = leg_instance["No_of_avail_seats"]
-            if remaining is None or remaining <= 0:
-                conn.rollback()
-                return False, "No seats are currently available for this leg instance."
-
             cursor.execute(
                 """
                 INSERT INTO SEAT (Flight_number, Leg_no, Date, Seat_no, Customer_name, Cphone)
@@ -123,13 +240,12 @@ def make_reservation(
                 (flight_number, leg_no, date_str, seat_no, customer_name, cphone),
             )
 
-            cursor.execute(
-                """
-                UPDATE LEG_INSTANCE
-                SET No_of_avail_seats = No_of_avail_seats - 1
-                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
-                """,
-                (flight_number, leg_no, date_str),
+            _sync_available_seat_count(
+                cursor,
+                flight_number,
+                leg_no,
+                date_str,
+                leg_instance["Airplane_id"],
             )
             conn.commit()
 
@@ -179,13 +295,12 @@ def cancel_reservation(
                 conn.rollback()
                 return False, f"Seat {seat_no} is not currently booked for that leg instance."
 
-            cursor.execute(
-                """
-                UPDATE LEG_INSTANCE
-                SET No_of_avail_seats = No_of_avail_seats + 1
-                WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
-                """,
-                (flight_number, leg_no, date_str),
+            _sync_available_seat_count(
+                cursor,
+                flight_number,
+                leg_no,
+                date_str,
+                leg_instance["Airplane_id"],
             )
             conn.commit()
 

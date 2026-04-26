@@ -127,6 +127,7 @@ python3 main.py
 ```
 
 The program will first prompt you for your MySQL password (input is hidden). If the password is incorrect, you can try again.
+At later input prompts, enter `m` to return to the main menu.
 
 ---
 
@@ -167,6 +168,7 @@ The password is requested securely at runtime and is not stored in the code or i
 - Use valid flight numbers when testing application features
 - `data/SEAT.csv` is loaded into `AIRPLANE_SEAT`, which stores the valid seat layout for each airplane
 - The booking table `SEAT` starts empty, so the SQL load script resets `LEG_INSTANCE.No_of_avail_seats` to full airplane capacity
+- Customer phone numbers must be entered as exactly 10 digits
 
 ---
 
