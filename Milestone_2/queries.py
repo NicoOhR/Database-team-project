@@ -15,11 +15,14 @@ That means:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from mysql.connector import Error
 
 from db import get_cursor
+
+SEAT_NO_PATTERN = re.compile(r"^(\d+)([A-Za-z]+)$")
 
 
 def _fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
@@ -32,6 +35,35 @@ def _fetch_one(query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | Non
     with get_cursor() as (_conn, cursor):
         cursor.execute(query, params)
         return cursor.fetchone()
+
+
+def _parse_seat_no(seat_no: str) -> tuple[int | None, str]:
+    """Split a seat like 12C into its row number and letter portion."""
+    match = SEAT_NO_PATTERN.fullmatch(seat_no)
+    if match is None:
+        return None, seat_no
+    return int(match.group(1)), match.group(2).upper()
+
+
+def _seat_sort_key(seat_no: str) -> tuple[int, str]:
+    row_no, letters = _parse_seat_no(seat_no)
+    if row_no is None:
+        return 10**9, seat_no
+    return row_no, letters
+
+
+def _get_available_seat_numbers(airplane_id: str, booked_seat_numbers: set[str]) -> list[str]:
+    seats = _fetch_all(
+        """
+        SELECT Seat_no
+        FROM AIRPLANE_SEAT
+        WHERE Airplane_id = %s
+        """,
+        (airplane_id,),
+    )
+    available = [row["Seat_no"] for row in seats if row["Seat_no"] not in booked_seat_numbers]
+    available.sort(key=_seat_sort_key)
+    return available
 
 
 def flight_exists(flight_number: str) -> bool:
@@ -179,7 +211,8 @@ def show_available_seats_summary(flight_number: str, leg_no: int, date_str: str)
     AIRPLANE_SEAT stores the valid seat layout for the assigned airplane.
     This function reports:
     - the LEG_INSTANCE row
-    - how many seats are still available (from No_of_avail_seats)
+    - how many seats are still available (total airplane seats minus booked seats)
+    - a compact summary of which seats are still available
     - which seat numbers are already booked in SEAT
     """
     detail = get_leg_instance_detail(flight_number, leg_no, date_str)
@@ -187,11 +220,33 @@ def show_available_seats_summary(flight_number: str, leg_no: int, date_str: str)
         raise ValueError("Leg instance not found.")
 
     booked = get_booked_seats(flight_number, leg_no, date_str)
+    booked_seat_numbers = sorted((row["Seat_no"] for row in booked), key=_seat_sort_key)
+    available_seat_numbers = _get_available_seat_numbers(
+        detail["Airplane_id"],
+        set(booked_seat_numbers),
+    )
+    total_seat_count = len(available_seat_numbers) + len(booked_seat_numbers)
+
+    available_rows: list[int] = []
+    available_letters: set[str] = set()
+    for seat_no in available_seat_numbers:
+        row_no, letters = _parse_seat_no(seat_no)
+        if row_no is not None:
+            available_rows.append(row_no)
+            available_letters.add(letters)
+
     return {
         "leg_instance": detail,
         "booked_seats": booked,
         "booked_count": len(booked),
-        "available_count": detail["No_of_avail_seats"],
+        "booked_seat_numbers": booked_seat_numbers,
+        "available_count": len(available_seat_numbers),
+        "stored_available_count": detail["No_of_avail_seats"],
+        "total_seat_count": total_seat_count,
+        "available_row_min": min(available_rows) if available_rows else None,
+        "available_row_max": max(available_rows) if available_rows else None,
+        "available_letters": sorted(available_letters),
+        "available_sample_seats": available_seat_numbers[:5],
     }
 
 
