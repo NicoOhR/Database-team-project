@@ -1,21 +1,27 @@
 """Reservation logic for the Milestone 2 schema.
 
-Implementation note:
+Important schema note:
+The final database follows the textbook structure more closely, so there is no
+separate RESERVATION table. Instead:
 - AIRPLANE_SEAT stores the valid seat layout for each airplane
 - SEAT stores one booked seat per (Flight_number, Leg_no, Date, Seat_no)
-- Customer_name and Cphone on SEAT capture the reservation details needed by
-  the Milestone 2 host application
 
-That means the reservation flow inserts and deletes rows in SEAT while
-database triggers keep LEG_INSTANCE.No_of_avail_seats synchronized.
+That means:
+- making a reservation inserts into SEAT
+- canceling a reservation deletes from SEAT
+- remaining capacity is tracked in LEG_INSTANCE.No_of_avail_seats
 """
 
 from __future__ import annotations
 
-from mysql.connector import Error, errorcode
+import re
+
+from mysql.connector import Error
 
 from db import get_cursor
 from queries import flight_exists, leg_exists
+
+CUSTOMER_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z .'-]*[A-Za-z]$")
 
 
 def _get_locked_leg_instance(cursor, flight_number: str, leg_no: int, date_str: str):
@@ -45,6 +51,46 @@ def _seat_exists_on_airplane(cursor, airplane_id: str, seat_no: str) -> bool:
     return cursor.fetchone() is not None
 
 
+def _sync_available_seat_count(
+    cursor,
+    flight_number: str,
+    leg_no: int,
+    date_str: str,
+    airplane_id: str,
+) -> int:
+    """Recalculate remaining seats from layout seats minus booked seats."""
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS total_seats
+        FROM AIRPLANE_SEAT
+        WHERE Airplane_id = %s
+        """,
+        (airplane_id,),
+    )
+    total_seats = cursor.fetchone()["total_seats"]
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS booked_count
+        FROM SEAT
+        WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+        """,
+        (flight_number, leg_no, date_str),
+    )
+    booked_count = cursor.fetchone()["booked_count"]
+    remaining = total_seats - booked_count
+
+    cursor.execute(
+        """
+        UPDATE LEG_INSTANCE
+        SET No_of_avail_seats = %s
+        WHERE Flight_number = %s AND Leg_no = %s AND Date = %s
+        """,
+        (remaining, flight_number, leg_no, date_str),
+    )
+    return remaining
+
+
 def _phone_is_valid(cphone: str) -> bool:
     """Return True when the phone number is exactly 10 digits."""
     return cphone.isdigit() and len(cphone) == 10
@@ -65,10 +111,12 @@ def validate_customer_name(customer_name: str) -> tuple[bool, str]:
     customer_name = customer_name.strip()
     if not customer_name:
         return False, "Customer name cannot be empty."
-    if not any(char.isalpha() for char in customer_name):
-        return False, "Customer name must include at least one letter."
+    if len(customer_name) > 60:
+        return False, "Customer name must be 60 characters or fewer."
     if any(char.isdigit() for char in customer_name):
         return False, "Customer name cannot contain numbers."
+    if not CUSTOMER_NAME_PATTERN.fullmatch(customer_name):
+        return False, "Customer name can only contain letters, spaces, periods, apostrophes, and hyphens."
     return True, customer_name
 
 
@@ -138,10 +186,8 @@ def make_reservation(
     3. leg instance must exist for that date
     4. customer phone must be exactly 10 digits
     5. seat number must exist on the airplane assigned to that leg instance
-    6. the requested seat number must not already be booked for that leg instance
-
-    The database schema also enforces seat validity and keeps
-    LEG_INSTANCE.No_of_avail_seats synchronized for any direct SQL writes.
+    6. No_of_avail_seats must be greater than zero
+    7. the requested seat number must not already be booked for that leg instance
     """
     seat_no = seat_no.strip().upper()
     customer_name = customer_name.strip()
@@ -180,6 +226,17 @@ def make_reservation(
                     f"{leg_instance['Airplane_id']} for that leg instance."
                 )
 
+            remaining = _sync_available_seat_count(
+                cursor,
+                flight_number,
+                leg_no,
+                date_str,
+                leg_instance["Airplane_id"],
+            )
+            if remaining <= 0:
+                conn.rollback()
+                return False, "No seats are currently available for this leg instance."
+
             cursor.execute(
                 """
                 SELECT 1 AS found
@@ -199,6 +256,14 @@ def make_reservation(
                 """,
                 (flight_number, leg_no, date_str, seat_no, customer_name, cphone),
             )
+
+            _sync_available_seat_count(
+                cursor,
+                flight_number,
+                leg_no,
+                date_str,
+                leg_instance["Airplane_id"],
+            )
             conn.commit()
 
         return True, (
@@ -206,9 +271,7 @@ def make_reservation(
             f"on flight {flight_number}, leg {leg_no}, date {date_str}, seat {seat_no}."
         )
     except Error as exc:
-        if exc.errno == errorcode.ER_DUP_ENTRY:
-            return False, f"Seat {seat_no} is already booked for that leg instance."
-        return False, f"Error making reservation: {getattr(exc, 'msg', exc)}"
+        return False, f"Error making reservation: {exc}"
 
 
 def cancel_reservation(
@@ -248,6 +311,14 @@ def cancel_reservation(
             if cursor.rowcount != 1:
                 conn.rollback()
                 return False, f"Seat {seat_no} is not currently booked for that leg instance."
+
+            _sync_available_seat_count(
+                cursor,
+                flight_number,
+                leg_no,
+                date_str,
+                leg_instance["Airplane_id"],
+            )
             conn.commit()
 
         return True, (
@@ -255,4 +326,4 @@ def cancel_reservation(
             f"date {date_str} was canceled successfully."
         )
     except Error as exc:
-        return False, f"Error canceling reservation: {getattr(exc, 'msg', exc)}"
+        return False, f"Error canceling reservation: {exc}"

@@ -1,141 +1,108 @@
-# Airport Management System
+# Airline Management System (Milestone 2)
 
-**Course:** CS 4347 - Database Systems
-**Milestone:** 2
-**Team Name:** Dubnium
+**CS 4347 - Database Systems**
+**Team:** Dubnium
 
-## Overview
+## ✈️ Overview
 
-This package contains the Milestone 2 host application for the airline database project.
-It implements the required application logic against a MySQL database whose core schema follows
-Figure 3.21 from the textbook.
+This package implements a robust, menu-driven Python host application for an Airline Management System. Built on a MySQL backend, the system is based on Figure 3.21, with implementation extensions for seat validation and reservation handling. The application provides comprehensive logic for flight management, real-time seat reservations, multi-leg trip searches, and operational reporting.
 
-Milestone 2 asks for programming logic rather than a GUI. For that reason, this submission uses
-a menu-driven console application that exercises the SQL database directly.
+## 🛠️ Core Technologies
 
-## Milestone 2 Compliance
+- **Language:** Python 3.10+
+- **Database:** MySQL 8.0+
+- **Driver:** `mysql-connector-python`
+- **Architecture:** Console-based interface with localized logic layers for database queries and reservation transactions.
 
-- host application language: Python 3
-- SQL database: MySQL
-- interface style: console application, which matches the Milestone 2 focus on logic
-- schema basis: Figure 3.21 airline ER diagram
-- delivered artifacts: SQL schema/data loader, Python host application, and build/run instructions
-
-## Package Contents
+## 📂 Project Structure
 
 ```text
 Milestone_2/
-|-- README.md
-|-- requirements.txt
-|-- project_4347.sql
-|-- db.py
-|-- main.py
-|-- queries.py
-|-- reservations.py
-`-- data/
-    |-- AIRPORT.csv
-    |-- AIRPLANE_TYPE.csv
-    |-- AIRPLANE.csv
-    |-- CAN_LAND.csv
-    |-- FLIGHT.csv
-    |-- FLIGHT_LEG.csv
-    |-- LEG_INSTANCE.csv
-    |-- FARE.csv
-    `-- SEAT.csv
+├── data/                  # Source CSV data for bootstrap
+├── db.py                  # Database connection & session management
+├── main.py                # Application entry point & UI logic
+├── queries.py             # Read-only SQL abstractions & data retrieval
+├── reservations.py        # Transactional logic for booking & capacity
+├── project_4347.sql       # SQL Schema & Trigger definitions
+├── README.md              # Markdown project documentation
+├── readme.pdf             # Required submission readme PDF
+└── requirements.txt       # Python dependencies
 ```
 
-## ER Diagram Mapping
+## 🚀 Getting Started
 
-The implementation follows the entities and relationships in Figure 3.21 as follows:
+### 1. Prerequisites
 
-- `AIRPORT`, `AIRPLANE_TYPE`, `AIRPLANE`, `CAN_LAND`, `FLIGHT`, `FLIGHT_LEG`, `LEG_INSTANCE`, and `FARE` map directly from the ER diagram.
-- The `SEAT` table stores one booked seat for one leg instance, together with `Customer_name` and `Cphone`. In the relational implementation, this is how the reservation information from Figure 3.21 is recorded.
-- The `AIRPLANE_SEAT` table is an auxiliary implementation table used to load the provided seat-layout CSV and validate that a requested seat exists on the airplane assigned to a leg instance. It supports the application logic but does not change the core ER design.
-- Database triggers enforce that every booked seat is valid for the airplane assigned to the selected leg instance and keep `LEG_INSTANCE.No_of_avail_seats` synchronized even for direct SQL writes.
+Ensure you have a local MySQL server running and Python 3 installed.
 
-## Prerequisites
-
-- Python 3
-- MySQL server running locally
-- a MySQL account that can create the `project_4347` database
-
-## Python Dependency
-
-Install the required connector from inside `Milestone_2/`:
+### 2. Install Dependencies
 
 ```bash
-python3 -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-`requirements.txt` contains:
+### 3. Database Configuration
 
-```text
-mysql-connector-python>=9.0.0
-```
-
-## MySQL Configuration
-
-This package uses `LOAD DATA LOCAL INFILE` to import the provided CSV files. If `local_infile`
-is disabled, enable it before running the SQL script:
+The application requires `local_infile` to be enabled for data loading. Execute the following in your MySQL client:
 
 ```sql
-SHOW GLOBAL VARIABLES LIKE 'local_infile';
 SET GLOBAL local_infile = 1;
-SHOW GLOBAL VARIABLES LIKE 'local_infile';
 ```
 
-## Build And Run
+### 4. Build and Initialize
 
-From inside the `Milestone_2/` directory:
-
-1. Create and load the database:
+Load the schema and bootstrap the initial dataset:
 
 ```bash
 mysql --local-infile=1 -u root -p < project_4347.sql
 ```
 
-2. Start the host application:
+### 5. Run the Application
 
 ```bash
 python3 main.py
 ```
 
-The application prompts for the MySQL password at startup. Enter `m` at later prompts to return
-to the main menu.
-
-## Application Features
+## 📱 Application Features
 
 The menu supports the following Milestone 2 operations:
 
-1. Test database connection
-2. Show the first 10 flights
-3. Show all legs for a flight
-4. Show all fares for a flight
-5. Show leg instances for a flight
-6. Show available seats for a specific leg instance
-7. Make a reservation
-8. Cancel a reservation
-9. Exit
+1. **Test database connection:** Verifies connectivity and identifies the active database.
+2. **Show first 10 flights:** Displays basic information for the first 10 flights in the system.
+3. **Show all legs for a flight:** Lists every scheduled leg for a specific flight number.
+4. **Show all fares for a flight:** Displays available pricing tiers and restrictions.
+5. **Show leg instances for a flight:** Lists specific dates and times when a flight is scheduled to fly.
+6. **Show available seats for a leg instance:** Provides a summary of capacity, booked seats, and a sample of available seat numbers.
+7. **Make a reservation:** Allows a user to book a valid seat for a specific passenger.
+8. **Cancel a reservation:** Removes a booking and restores seat capacity.
+9. **Search trip between two airports:** Finds direct and one-connection trips.
+10. **Search flight details by flight number:** Aggregates legs, fares, and instance counts for a flight.
+11. **Aircraft utilization report:** Summarizes usage (hours and leg counts) for every airplane in a date range.
+12. **Passenger itinerary by customer name:** Returns a complete list of booked legs and seats for a matching customer name.
+13. **Exit:** Safely closes the application.
 
-## Runtime Assumptions
+### Feature Highlights
 
-- host: `localhost`
-- port: `3306`
-- database: `project_4347`
-- user: `root`
+- **Intelligent Trip Search:** Accepts either three-letter airport codes (e.g., `DFW`, `SFO`) or city names (e.g., `Dallas`, `San Francisco`). It automatically resolves city names to all relevant airports and supports both direct itineraries and trips with exactly one connection.
+- **Operational Reporting:** The aircraft utilization report calculates flight duration and service frequency between a start and end date, providing a clear picture of fleet activity.
+- **Customer Portals:** The passenger itinerary search enables quick retrieval of all flight legs and seat assignments associated with a specific name, facilitating easy travel management.
 
-The password is requested at runtime and is not stored in the repository.
-If needed, the host, port, user, and database name can be overridden with
-`AIRLINE_DB_HOST`, `AIRLINE_DB_PORT`, `AIRLINE_DB_USER`, and `AIRLINE_DB_NAME`.
-Customer phone numbers must be entered as exactly 10 digits.
+## 📊 Database Design
 
-## Submission Notes
+The implementation maps the textbook ER diagram to a relational schema with the following enhancements:
 
-- This directory is the authoritative Milestone 2 package.
-- The final archive should be created from `Milestone_2/`.
-- This README is the source document for the required submission readme; export it to `readme.pdf` when assembling the final archive if the course submission format requires PDF specifically.
+- **`SEAT` Table:** Acts as the central reservation ledger, storing customer details tied to specific leg instances.
+- **`AIRPLANE_SEAT`:** A reference table defining the physical seat map for each aircraft type, ensuring users can only book valid seats.
+- **`CAN_LAND`:** Stores compatibility rules for which aircraft types can land at specific airports.
 
-## Team Members
+## 🛡️ Runtime Assumptions
+
+- **Host:** `localhost:3306`
+- **Database:** `project_4347`
+- **User:** `root` (Password prompted at runtime)
+- **Data Integrity:** Phone numbers must be exactly 10 digits; customer names are validated against professional naming standards.
+
+## 👥 Team Dubnium
 
 - Nimrod Ohayon Rozanes
 - Ali Mohammed

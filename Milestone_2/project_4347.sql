@@ -4,11 +4,6 @@
 -- Airline Database Script
 -- Based on ER Diagram Figure 3.21
 -- Database: project_4347
---
--- Core tables below follow the airline ER design from Figure 3.21.
--- One auxiliary support table, AIRPLANE_SEAT, is added so the provided seat-layout
--- CSV can be loaded and seat numbers can be validated against the airplane
--- assigned to each leg instance.
 
 -- From Terminal, run the script:
 -- cd project
@@ -49,7 +44,7 @@ CREATE TABLE CAN_LAND (
 CREATE TABLE FLIGHT (
   Number VARCHAR(10) PRIMARY KEY,
   Airline VARCHAR(60),
-  Weekdays VARCHAR(20)
+  Weekdays VARCHAR(50)
 );
 
 CREATE TABLE FLIGHT_LEG (
@@ -80,14 +75,13 @@ CREATE TABLE LEG_INSTANCE (
 
 CREATE TABLE FARE (
   Flight_number VARCHAR(10),
-  Code VARCHAR(10),
+  Code VARCHAR(20),
   Amount DECIMAL(10,2),
   Restrictions VARCHAR(200),
   PRIMARY KEY (Flight_number, Code),
   FOREIGN KEY (Flight_number) REFERENCES FLIGHT(Number)
 );
 
--- Auxiliary seat-layout table loaded from the provided seat CSV.
 CREATE TABLE AIRPLANE_SEAT (
   Airplane_id VARCHAR(20) NOT NULL,
   Seat_no VARCHAR(5) NOT NULL,
@@ -96,16 +90,14 @@ CREATE TABLE AIRPLANE_SEAT (
   FOREIGN KEY (Airplane_id) REFERENCES AIRPLANE(Airplane_id)
 );
 
--- SEAT records one booked seat assignment for one leg instance.
--- Together with Customer_name and Cphone, it stores the reservation data used
--- by the Milestone 2 host application.
+-- SEAT stores booked seats for a specific leg instance and starts empty.
 CREATE TABLE SEAT (
   Flight_number VARCHAR(10) NOT NULL,
   Leg_no INT NOT NULL,
   Date DATE NOT NULL,
   Seat_no VARCHAR(5) NOT NULL,
-  Customer_name VARCHAR(60) NOT NULL,
-  Cphone VARCHAR(20) NOT NULL,
+  Customer_name VARCHAR(60),
+  Cphone VARCHAR(20),
   PRIMARY KEY (Flight_number, Leg_no, Date, Seat_no),
   CONSTRAINT fk_seat_leg_instance
     FOREIGN KEY (Flight_number, Leg_no, Date)
@@ -116,139 +108,42 @@ CREATE TABLE SEAT (
 
 DELIMITER //
 
-CREATE PROCEDURE sync_leg_instance_available_seats(
-  IN p_flight_number VARCHAR(10),
-  IN p_leg_no INT,
-  IN p_date DATE
-)
-BEGIN
-  UPDATE LEG_INSTANCE li
-  SET No_of_avail_seats = (
-    SELECT COUNT(*)
-    FROM AIRPLANE_SEAT aps
-    WHERE aps.Airplane_id = li.Airplane_id
-  ) - (
-    SELECT COUNT(*)
-    FROM SEAT s
-    WHERE s.Flight_number = li.Flight_number
-      AND s.Leg_no = li.Leg_no
-      AND s.Date = li.Date
-  )
-  WHERE li.Flight_number = p_flight_number
-    AND li.Leg_no = p_leg_no
-    AND li.Date = p_date;
-END//
-
-CREATE TRIGGER seat_before_insert
+CREATE TRIGGER validate_seat_before_insert
 BEFORE INSERT ON SEAT
 FOR EACH ROW
 BEGIN
-  DECLARE v_airplane_id VARCHAR(20);
-
-  SET NEW.Seat_no = UPPER(TRIM(NEW.Seat_no));
-  SET NEW.Customer_name = TRIM(NEW.Customer_name);
-  SET NEW.Cphone = TRIM(NEW.Cphone);
-
-  IF NEW.Customer_name = '' THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Customer name cannot be empty.';
-  END IF;
-
-  IF NEW.Cphone NOT REGEXP '^[0-9]{10}$' THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Phone number must be exactly 10 digits.';
-  END IF;
-
-  SET v_airplane_id = (
-    SELECT Airplane_id
-    FROM LEG_INSTANCE
-    WHERE Flight_number = NEW.Flight_number
-      AND Leg_no = NEW.Leg_no
-      AND Date = NEW.Date
-    LIMIT 1
-  );
-
-  IF v_airplane_id IS NULL THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Reservation references a missing leg instance.';
-  END IF;
-
   IF NOT EXISTS (
     SELECT 1
-    FROM AIRPLANE_SEAT
-    WHERE Airplane_id = v_airplane_id
-      AND Seat_no = NEW.Seat_no
+    FROM LEG_INSTANCE li
+    JOIN AIRPLANE_SEAT aps
+      ON aps.Airplane_id = li.Airplane_id
+     AND aps.Seat_no = NEW.Seat_no
+    WHERE li.Flight_number = NEW.Flight_number
+      AND li.Leg_no = NEW.Leg_no
+      AND li.Date = NEW.Date
   ) THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Seat number is not valid for the airplane assigned to this leg instance.';
+      SET MESSAGE_TEXT = 'Seat number is not valid for the assigned airplane';
   END IF;
 END//
 
-CREATE TRIGGER seat_before_update
+CREATE TRIGGER validate_seat_before_update
 BEFORE UPDATE ON SEAT
 FOR EACH ROW
 BEGIN
-  DECLARE v_airplane_id VARCHAR(20);
-
-  SET NEW.Seat_no = UPPER(TRIM(NEW.Seat_no));
-  SET NEW.Customer_name = TRIM(NEW.Customer_name);
-  SET NEW.Cphone = TRIM(NEW.Cphone);
-
-  IF NEW.Customer_name = '' THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Customer name cannot be empty.';
-  END IF;
-
-  IF NEW.Cphone NOT REGEXP '^[0-9]{10}$' THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Phone number must be exactly 10 digits.';
-  END IF;
-
-  SET v_airplane_id = (
-    SELECT Airplane_id
-    FROM LEG_INSTANCE
-    WHERE Flight_number = NEW.Flight_number
-      AND Leg_no = NEW.Leg_no
-      AND Date = NEW.Date
-    LIMIT 1
-  );
-
-  IF v_airplane_id IS NULL THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Reservation references a missing leg instance.';
-  END IF;
-
   IF NOT EXISTS (
     SELECT 1
-    FROM AIRPLANE_SEAT
-    WHERE Airplane_id = v_airplane_id
-      AND Seat_no = NEW.Seat_no
+    FROM LEG_INSTANCE li
+    JOIN AIRPLANE_SEAT aps
+      ON aps.Airplane_id = li.Airplane_id
+     AND aps.Seat_no = NEW.Seat_no
+    WHERE li.Flight_number = NEW.Flight_number
+      AND li.Leg_no = NEW.Leg_no
+      AND li.Date = NEW.Date
   ) THEN
     SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT = 'Seat number is not valid for the airplane assigned to this leg instance.';
+      SET MESSAGE_TEXT = 'Seat number is not valid for the assigned airplane';
   END IF;
-END//
-
-CREATE TRIGGER seat_after_insert
-AFTER INSERT ON SEAT
-FOR EACH ROW
-BEGIN
-  CALL sync_leg_instance_available_seats(NEW.Flight_number, NEW.Leg_no, NEW.Date);
-END//
-
-CREATE TRIGGER seat_after_delete
-AFTER DELETE ON SEAT
-FOR EACH ROW
-BEGIN
-  CALL sync_leg_instance_available_seats(OLD.Flight_number, OLD.Leg_no, OLD.Date);
-END//
-
-CREATE TRIGGER seat_after_update
-AFTER UPDATE ON SEAT
-FOR EACH ROW
-BEGIN
-  CALL sync_leg_instance_available_seats(OLD.Flight_number, OLD.Leg_no, OLD.Date);
-  CALL sync_leg_instance_available_seats(NEW.Flight_number, NEW.Leg_no, NEW.Date);
 END//
 
 DELIMITER ;

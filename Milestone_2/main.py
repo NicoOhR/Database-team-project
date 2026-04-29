@@ -1,8 +1,7 @@
 """Console host application for CS 4347 Milestone 2.
 
-Milestone 2 focuses on host application logic rather than a GUI, so this
-module intentionally provides a menu-driven console interface for exercising
-the SQL database.
+This script is intentionally simple and heavily commented so it is easy to
+learn from, demo, and modify as a team.
 
 Menu layout:
 1. Test database connection
@@ -13,7 +12,11 @@ Menu layout:
 6. Show available seats for a leg instance
 7. Make reservation
 8. Cancel reservation
-9. Exit
+9. Search trip between two airports
+10. Search flight details by flight number
+11. Aircraft utilization report
+12. Passenger itinerary by customer name
+13. Exit
 """
 
 from __future__ import annotations
@@ -27,10 +30,14 @@ from queries import (
     flight_exists,
     leg_exists,
     leg_instance_exists,
+    safe_get_aircraft_utilization,
     safe_get_fares,
+    safe_get_flight_details,
     safe_get_flight_legs,
     safe_get_flights,
     safe_get_leg_instances,
+    safe_get_passenger_itinerary,
+    safe_search_trips,
     safe_show_available_seats_summary,
 )
 from reservations import (
@@ -42,7 +49,6 @@ from reservations import (
 )
 
 RETURN_TO_MENU = object()
-RETRY_OR_MENU_MESSAGE = "Try again or press m for menu."
 
 
 def _is_main_menu_request(value: str) -> bool:
@@ -50,23 +56,18 @@ def _is_main_menu_request(value: str) -> bool:
     return value.lower() == "m"
 
 
+def _print_prompt_db_error(exc: Error) -> None:
+    """Show database prompt errors without crashing the menu loop."""
+    print(f"Database error: {exc}")
+    print("Returning to the main menu.")
+
+
 def prompt_text_or_menu(label: str):
     """Prompt for text input while allowing a main-menu return."""
-    value = input(f"{label} or m for menu: ").strip()
+    value = input(f"{label} or m for main menu: ").strip()
     if _is_main_menu_request(value):
         return RETURN_TO_MENU
     return value
-
-
-def prompt_required_text_or_menu(label: str):
-    """Prompt until a non-empty value is entered or the user returns to menu."""
-    while True:
-        value = prompt_text_or_menu(label)
-        if value is RETURN_TO_MENU:
-            return RETURN_TO_MENU
-        if value:
-            return value
-        print(f"{label} cannot be empty. {RETRY_OR_MENU_MESSAGE}")
 
 
 def prompt_valid_customer_phone():
@@ -80,7 +81,7 @@ def prompt_valid_customer_phone():
         if ok:
             return result
 
-        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
+        print(f"{result} Try again or press m for main menu.")
 
 
 def prompt_valid_customer_name():
@@ -94,7 +95,54 @@ def prompt_valid_customer_name():
         if ok:
             return result
 
-        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
+        print(f"{result} Try again or press m for main menu.")
+
+
+def prompt_customer_name_search():
+    """Prompt for a passenger name search without applying reservation-name rules."""
+    while True:
+        customer_name = prompt_text_or_menu("Customer name")
+        if customer_name is RETURN_TO_MENU:
+            return RETURN_TO_MENU
+        if customer_name:
+            return customer_name
+        print("Customer name cannot be empty. Try again or press m for main menu.")
+
+
+def prompt_airport_search(label: str):
+    """Prompt for a city name or three-letter airport code."""
+    while True:
+        airport_search = prompt_text_or_menu(label)
+        if airport_search is RETURN_TO_MENU:
+            return RETURN_TO_MENU
+        if airport_search:
+            return airport_search
+        print("Enter a city name or three-letter airport code. Try again or press m for main menu.")
+
+
+def format_airport_matches(airports: list[dict]) -> str:
+    """Format resolved airport rows for trip-search output."""
+    if not airports:
+        return "none"
+
+    return ", ".join(
+        f"{airport['Airport_code']} ({airport['City']})"
+        for airport in airports
+    )
+
+
+def prompt_valid_date(label: str):
+    """Prompt for a valid date string."""
+    while True:
+        date_str = input(f"{label} (YYYY-MM-DD) or m for main menu: ").strip()
+        if _is_main_menu_request(date_str):
+            return RETURN_TO_MENU
+        try:
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            print("Invalid date format. Please enter YYYY-MM-DD or press m for main menu.")
+            continue
+        return date_str
 
 
 def prompt_valid_reservation_seat(flight_number: str, leg_no: int, date_str: str):
@@ -108,28 +156,25 @@ def prompt_valid_reservation_seat(flight_number: str, leg_no: int, date_str: str
         if ok:
             return result
 
-        print(f"{result} {RETRY_OR_MENU_MESSAGE}")
-
-
-def _return_to_menu_on_lookup_error(label: str, exc: Error):
-    """Report a database lookup error and return the user to the main menu."""
-    print(f"Database error while checking {label}: {exc}")
-    print("Returning to the main menu.")
-    return RETURN_TO_MENU
+        print(f"{result} Try again or press m for main menu.")
 
 
 def prompt_valid_flight_number():
     """Prompt until the user enters a valid flight number or returns to menu."""
     while True:
-        flight_number = prompt_required_text_or_menu("Flight number")
-        if flight_number is RETURN_TO_MENU:
+        flight_number = input("Flight number or m for main menu: ").strip()
+        if not flight_number:
+            print("Flight number cannot be empty.")
+            continue
+        if _is_main_menu_request(flight_number):
             return RETURN_TO_MENU
         try:
             exists = flight_exists(flight_number)
         except Error as exc:
-            return _return_to_menu_on_lookup_error("flight number", exc)
+            _print_prompt_db_error(exc)
+            return RETURN_TO_MENU
         if not exists:
-            print(f"Flight number {flight_number} does not exist. {RETRY_OR_MENU_MESSAGE}")
+            print(f"Flight number {flight_number} does not exist.")
             continue
         return flight_number
 
@@ -137,22 +182,26 @@ def prompt_valid_flight_number():
 def prompt_valid_leg_number(flight_number: str):
     """Prompt until the user enters a valid leg number for a flight."""
     while True:
-        leg_raw = prompt_required_text_or_menu("Leg number")
-        if leg_raw is RETURN_TO_MENU:
+        leg_raw = input("Leg number or m for main menu: ").strip()
+        if not leg_raw:
+            print("Leg number cannot be empty.")
+            continue
+        if _is_main_menu_request(leg_raw):
             return RETURN_TO_MENU
         if not leg_raw.isdigit():
-            print(f"Leg number must be a whole number. {RETRY_OR_MENU_MESSAGE}")
+            print("Leg number must be a whole number. Try again or press m for main menu.")
             continue
 
         leg_no = int(leg_raw)
         try:
             exists = leg_exists(flight_number, leg_no)
         except Error as exc:
-            return _return_to_menu_on_lookup_error("leg number", exc)
+            _print_prompt_db_error(exc)
+            return RETURN_TO_MENU
         if not exists:
             print(
                 f"Leg number {leg_no} does not exist for flight {flight_number}. "
-                f"{RETRY_OR_MENU_MESSAGE}"
+                "Try again or press m for main menu."
             )
             continue
         return leg_no
@@ -161,24 +210,25 @@ def prompt_valid_leg_number(flight_number: str):
 def prompt_optional_leg_number(flight_number: str):
     """Prompt for an optional leg number while allowing a main-menu return."""
     while True:
-        leg_raw = input("Optional leg number, m for menu, or press Enter to skip: ").strip()
+        leg_raw = input("Optional leg number, m for main menu, or press Enter to skip: ").strip()
         if not leg_raw:
             return None
         if _is_main_menu_request(leg_raw):
             return RETURN_TO_MENU
         if not leg_raw.isdigit():
-            print(f"Leg number must be a whole number. {RETRY_OR_MENU_MESSAGE}")
+            print("Leg number must be a whole number. Try again or press m for main menu.")
             continue
 
         leg_no = int(leg_raw)
         try:
             exists = leg_exists(flight_number, leg_no)
         except Error as exc:
-            return _return_to_menu_on_lookup_error("leg number", exc)
+            _print_prompt_db_error(exc)
+            return RETURN_TO_MENU
         if not exists:
             print(
                 f"Leg number {leg_no} does not exist for flight {flight_number}. "
-                f"{RETRY_OR_MENU_MESSAGE}"
+                "Try again or press m for main menu."
             )
             continue
         return leg_no
@@ -187,23 +237,24 @@ def prompt_optional_leg_number(flight_number: str):
 def prompt_valid_date_for_leg_instance(flight_number: str, leg_no: int):
     """Prompt for a valid date and confirm the selected leg instance exists."""
     while True:
-        date_str = prompt_required_text_or_menu("Date (YYYY-MM-DD)")
-        if date_str is RETURN_TO_MENU:
+        date_str = input("Date (YYYY-MM-DD) or m for main menu: ").strip()
+        if _is_main_menu_request(date_str):
             return RETURN_TO_MENU
         try:
             datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
-            print(f"Invalid date format. Please enter YYYY-MM-DD. {RETRY_OR_MENU_MESSAGE}")
+            print("Invalid date format. Please enter YYYY-MM-DD or press m to return to the main menu.")
             continue
 
         try:
             exists = leg_instance_exists(flight_number, leg_no, date_str)
         except Error as exc:
-            return _return_to_menu_on_lookup_error("leg instance date", exc)
+            _print_prompt_db_error(exc)
+            return RETURN_TO_MENU
         if not exists:
             print(
                 f"Flight {flight_number} and leg {leg_no} are valid, "
-                f"but no leg instance exists on {date_str}. {RETRY_OR_MENU_MESSAGE}"
+                f"but no leg instance exists on {date_str}."
             )
             continue
         return date_str
@@ -265,22 +316,33 @@ def print_header() -> None:
     print("6. Show available seats for a leg instance")
     print("7. Make reservation")
     print("8. Cancel reservation")
-    print("9. Exit")
+    print("9. Search trip between two airports")
+    print("10. Search flight details by flight number")
+    print("11. Aircraft utilization report")
+    print("12. Passenger itinerary by customer name")
+    print("13. Exit")
 
 
 def print_rows(title: str, rows: list[dict]) -> None:
     """
-    Print a list of dictionary rows in a readable format.
+    Print a list of dictionary rows in a readable format with pagination.
     """
     print(f"\n{title}")
     if not rows:
         print("No rows found.")
         return
 
+    page_size = 20
     for index, row in enumerate(rows, start=1):
         print(f"\n[{index}]")
         for key, value in row.items():
             print(f"{key}: {value}")
+
+        if index % page_size == 0 and index < len(rows):
+            choice = input(f"\nShowing {index}/{len(rows)}. Press Enter for more, or m for menu: ").strip()
+            if _is_main_menu_request(choice):
+                print("Returning to the main menu.")
+                break
 
 
 def handle_test_connection() -> None:
@@ -431,6 +493,83 @@ def handle_cancel_reservation() -> None:
     print(message)
 
 
+def handle_search_trips() -> None:
+    """Search direct and one-connection trips between two airports."""
+    origin = prompt_airport_search("Origin city or airport code")
+    if origin is RETURN_TO_MENU:
+        return
+
+    destination = prompt_airport_search("Destination city or airport code")
+    if destination is RETURN_TO_MENU:
+        return
+
+    ok, result = safe_search_trips(origin, destination)
+    if not ok:
+        print(result)
+        return
+
+    print(f"\nResolved origin: {format_airport_matches(result['origin_airports'])}")
+    print(f"Resolved destination: {format_airport_matches(result['destination_airports'])}")
+    print_rows(f"Direct trips from {origin} to {destination}:", result["direct"])
+    print_rows(
+        f"One-connection trips from {origin} to {destination}:",
+        result["one_connection"],
+    )
+
+
+def handle_search_flight_details() -> None:
+    """Show complete details for a flight number."""
+    flight_number = prompt_valid_flight_number()
+    if flight_number is RETURN_TO_MENU:
+        return
+
+    ok, result = safe_get_flight_details(flight_number)
+    if not ok:
+        print(result)
+        return
+
+    print_rows(f"Flight {flight_number}:", [result["flight"]])
+    print_rows(f"Legs for flight {flight_number}:", result["legs"])
+    print_rows(f"Fares for flight {flight_number}:", result["fares"])
+    print(f"\nLeg instances scheduled for flight {flight_number}: {result['instance_count']}")
+
+
+def handle_aircraft_utilization_report() -> None:
+    """Show aircraft usage between two dates."""
+    start_date = prompt_valid_date("Start date")
+    if start_date is RETURN_TO_MENU:
+        return
+
+    end_date = prompt_valid_date("End date")
+    if end_date is RETURN_TO_MENU:
+        return
+
+    if end_date < start_date:
+        print("End date cannot be before start date.")
+        return
+
+    ok, result = safe_get_aircraft_utilization(start_date, end_date)
+    if not ok:
+        print(result)
+        return
+
+    print_rows(f"Aircraft utilization from {start_date} to {end_date}:", result)
+
+
+def handle_passenger_itinerary() -> None:
+    """Show booked legs and seats for a customer name."""
+    customer_name = prompt_customer_name_search()
+    if customer_name is RETURN_TO_MENU:
+        return
+
+    ok, result = safe_get_passenger_itinerary(customer_name)
+    if not ok:
+        print(result)
+        return
+
+    print_rows(f"Passenger itinerary for {customer_name}:", result)
+
+
 def main() -> None:
     """Main console loop."""
     while True:
@@ -450,30 +589,42 @@ def main() -> None:
         print("Please try again.\n")
 
     while True:
-        print_header()
-        choice = input("\nChoose an option: ").strip()
+        try:
+            print_header()
+            choice = input("\nChoose an option: ").strip()
 
-        if choice == "1":
-            handle_test_connection()
-        elif choice == "2":
-            handle_show_flights()
-        elif choice == "3":
-            handle_show_flight_legs()
-        elif choice == "4":
-            handle_show_fares()
-        elif choice == "5":
-            handle_show_leg_instances()
-        elif choice == "6":
-            handle_show_available_seats()
-        elif choice == "7":
-            handle_make_reservation()
-        elif choice == "8":
-            handle_cancel_reservation()
-        elif choice == "9":
-            print("Goodbye.")
+            if choice == "1":
+                handle_test_connection()
+            elif choice == "2":
+                handle_show_flights()
+            elif choice == "3":
+                handle_show_flight_legs()
+            elif choice == "4":
+                handle_show_fares()
+            elif choice == "5":
+                handle_show_leg_instances()
+            elif choice == "6":
+                handle_show_available_seats()
+            elif choice == "7":
+                handle_make_reservation()
+            elif choice == "8":
+                handle_cancel_reservation()
+            elif choice == "9":
+                handle_search_trips()
+            elif choice == "10":
+                handle_search_flight_details()
+            elif choice == "11":
+                handle_aircraft_utilization_report()
+            elif choice == "12":
+                handle_passenger_itinerary()
+            elif choice == "13":
+                print("Goodbye.")
+                break
+            else:
+                print("Invalid option. Please choose a number from 1 to 13.")
+        except KeyboardInterrupt:
+            print("\nGoodbye.")
             break
-        else:
-            print("Invalid option. Please choose a number from 1 to 9.")
 
 
 if __name__ == "__main__":
