@@ -30,6 +30,7 @@ from queries import (
     flight_exists,
     leg_exists,
     leg_instance_exists,
+    resolve_airport_search,
     safe_get_aircraft_utilization,
     safe_get_fares,
     safe_get_flight_details,
@@ -129,6 +130,27 @@ def format_airport_matches(airports: list[dict]) -> str:
         f"{airport['Airport_code']} ({airport['City']})"
         for airport in airports
     )
+
+
+def prompt_choose_airport(label: str, matches: list[dict]):
+    """Ask the user to pick exactly one airport from resolved matches."""
+    while True:
+        print(f"\n{label} matches multiple airports:")
+        for index, airport in enumerate(matches, start=1):
+            print(f"{index}. {airport['Airport_code']} - {airport['Name']} ({airport['City']}, {airport['State']})")
+
+        choice = input("Choose one number or m for main menu: ").strip()
+        if _is_main_menu_request(choice):
+            return RETURN_TO_MENU
+        if not choice.isdigit():
+            print("Please enter a valid number.")
+            continue
+
+        selected = int(choice)
+        if 1 <= selected <= len(matches):
+            return matches[selected - 1]["Airport_code"]
+
+        print(f"Please choose a number from 1 to {len(matches)}.")
 
 
 def prompt_valid_date(label: str):
@@ -503,16 +525,42 @@ def handle_search_trips() -> None:
     if destination is RETURN_TO_MENU:
         return
 
-    ok, result = safe_search_trips(origin, destination)
+    origin_matches = resolve_airport_search(origin)
+    if not origin_matches:
+        print(f"No airport found for origin {origin}.")
+        return
+
+    destination_matches = resolve_airport_search(destination)
+    if not destination_matches:
+        print(f"No airport found for destination {destination}.")
+        return
+
+    if len(origin_matches) == 1:
+        origin_code = origin_matches[0]["Airport_code"]
+    else:
+        selected_origin = prompt_choose_airport("Origin", origin_matches)
+        if selected_origin is RETURN_TO_MENU:
+            return
+        origin_code = selected_origin
+
+    if len(destination_matches) == 1:
+        destination_code = destination_matches[0]["Airport_code"]
+    else:
+        selected_destination = prompt_choose_airport("Destination", destination_matches)
+        if selected_destination is RETURN_TO_MENU:
+            return
+        destination_code = selected_destination
+
+    ok, result = safe_search_trips(origin_code, destination_code)
     if not ok:
         print(result)
         return
 
     print(f"\nResolved origin: {format_airport_matches(result['origin_airports'])}")
     print(f"Resolved destination: {format_airport_matches(result['destination_airports'])}")
-    print_rows(f"Direct trips from {origin} to {destination}:", result["direct"])
+    print_rows(f"Direct trips from {origin_code} to {destination_code}:", result["direct"])
     print_rows(
-        f"One-connection trips from {origin} to {destination}:",
+        f"One-connection trips from {origin_code} to {destination_code}:",
         result["one_connection"],
     )
 
