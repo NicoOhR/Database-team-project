@@ -25,6 +25,10 @@ def _valid_date(date_str: str) -> bool:
         return False
 
 
+def _normalize_date(date_str: str) -> str:
+    return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d")
+
+
 class Milestone3GUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -528,6 +532,8 @@ class Milestone3GUI(tk.Tk):
         if not _valid_date(start_date) or not _valid_date(end_date):
             messagebox.showerror("Invalid Date", "Please use YYYY-MM-DD for start and end.")
             return
+        start_date = _normalize_date(start_date)
+        end_date = _normalize_date(end_date)
         if end_date < start_date:
             messagebox.showerror("Invalid Range", "End date must be on or after start date.")
             return

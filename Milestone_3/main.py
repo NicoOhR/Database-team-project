@@ -160,11 +160,11 @@ def prompt_valid_date(label: str):
         if _is_main_menu_request(date_str):
             return RETURN_TO_MENU
         try:
-            datetime.strptime(date_str, "%Y-%m-%d")
+            parsed_date = datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             print("Invalid date format. Please enter YYYY-MM-DD or press m for main menu.")
             continue
-        return date_str
+        return parsed_date.strftime("%Y-%m-%d")
 
 
 def prompt_valid_reservation_seat(flight_number: str, leg_no: int, date_str: str):
@@ -525,12 +525,17 @@ def handle_search_trips() -> None:
     if destination is RETURN_TO_MENU:
         return
 
-    origin_matches = resolve_airport_search(origin)
+    try:
+        origin_matches = resolve_airport_search(origin)
+        destination_matches = resolve_airport_search(destination)
+    except Error as exc:
+        _print_prompt_db_error(exc)
+        return
+
     if not origin_matches:
         print(f"No airport found for origin {origin}.")
         return
 
-    destination_matches = resolve_airport_search(destination)
     if not destination_matches:
         print(f"No airport found for destination {destination}.")
         return
