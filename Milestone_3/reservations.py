@@ -1,4 +1,4 @@
-"""Reservation logic for the Milestone 2 schema.
+"""Reservation logic for the Milestone 3 schema.
 
 Important schema note:
 The final database follows the textbook structure more closely, so there is no

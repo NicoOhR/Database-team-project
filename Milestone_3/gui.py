@@ -123,7 +123,7 @@ class Milestone3GUI(tk.Tk):
     @staticmethod
     def _render_rows(tree: ttk.Treeview, rows: list[dict]):
         for row in rows:
-            values = [row.get(col, "") for col in tree["columns"]]
+            values = [("" if row.get(col, "") is None else row.get(col, "")) for col in tree["columns"]]
             tree.insert("", "end", values=values)
 
     @staticmethod

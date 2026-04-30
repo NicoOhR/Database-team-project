@@ -1,4 +1,4 @@
-"""Console host application for CS 4347 Milestone 2.
+"""Console host application for CS 4347 Milestone 3.
 
 This script is intentionally simple and heavily commented so it is easy to
 learn from, demo, and modify as a team.
@@ -328,7 +328,7 @@ def format_limited_list(values: list[str], limit: int = 5, total_count: int | No
 
 def print_header() -> None:
     """Display the main menu."""
-    print("\nAirport Management System (Milestone 2)")
+    print("\nAirport Management System (Milestone 3)")
     print("--------------------------------------")
     print("1. Test database connection")
     print("2. Show first 10 flights")

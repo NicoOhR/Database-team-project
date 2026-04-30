@@ -1,4 +1,4 @@
-"""Database connection helpers for the CS 4347 Milestone 2 console app.
+"""Database connection helpers for the CS 4347 Milestone 3 application.
 
 This module does one job: create and manage connections/cursors for MySQL.
 The rest of the application imports this module instead of opening raw
