@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import tkinter as tk
 from tkinter import messagebox, ttk
-
+import re
 from db import set_db_password, test_connection
 from milestone3_queries import (
     safe_get_aircraft_utilization,
@@ -460,7 +460,7 @@ class Milestone3GUI(tk.Tk):
         date = self.book_date.get().strip()
         seat_no = self.book_seat_no.get().strip()
         customer_name = self.book_name.get().strip()
-        phone = self.book_phone.get().strip()
+        phone = re.sub(r'\D', '', self.book_phone.get().strip())
         self.book_message_label.configure(fg="#d35400")
 
         if not leg_raw.isdigit():
@@ -519,7 +519,7 @@ class Milestone3GUI(tk.Tk):
         self._run_itinerary_search(lookup)
 
     def on_search_itinerary_by_phone(self):
-        lookup = self.itinerary_phone.get().strip()
+        lookup = re.sub(r'\D', '', self.itinerary_phone.get().strip())
         if not lookup:
             messagebox.showerror("Input Error", "Phone is required.")
             return

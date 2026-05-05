@@ -18,7 +18,7 @@
 - Origin: `DFW`
 - Destination: `JFK`
 - Date: `2025-10-04`
-- DL3012 leg 2 arrives LGA 14:29, AA1061 leg 1 departs LGA 15:12 — gap filter broken at milestone3_queries.py lines 95–101
+- DL3012 leg 2 (DFW→LGA, actual arr 14:29) + AA1061 leg 1 (LGA→JFK, actual dep 15:12) = 43 min gap — gap filter broken at milestone3_queries.py lines 95–101
 
 ---
 
