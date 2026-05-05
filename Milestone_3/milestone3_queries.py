@@ -92,13 +92,10 @@ def search_trips(origin_code: str, destination_code: str, date: str) -> dict[str
           AND li1.Date = %s
           AND fl1.Arr_airport_code <> fl1.Dep_airport_code
           AND fl1.Arr_airport_code <> fl2.Arr_airport_code
-          AND (
-                TIMESTAMP(li2.Date, li2.Dep_time) >=
-                TIMESTAMP(
-                    DATE_ADD(li1.Date, INTERVAL (li1.Arr_time < li1.Dep_time) DAY),
-                    li1.Arr_time
-                ) + INTERVAL 1 HOUR
-              )
+          AND TIMESTAMPDIFF(MINUTE,
+                TIMESTAMP(li1.Date, li1.Arr_time),
+                TIMESTAMP(li2.Date, li2.Dep_time)
+              ) >= 60
         ORDER BY li1.Dep_time, li2.Dep_time
         LIMIT 100
         """,

@@ -12,4 +12,4 @@ Passanger Booking:
 * passanger itinarary needs to be sorted by leg number
 
 ~~Test data is a bit weird~~
-phone numbers can be normalized relatively easily
+~~phone numbers can be normalized relatively easily~~

@@ -593,5 +593,38 @@ def main():
     root.mainloop()
 
 
+def _run_tests():
+    import sys
+    password = sys.argv[2] if len(sys.argv) > 2 else input("DB password: ")
+    from db import set_db_password
+    set_db_password(password)
+
+    print("\n--- Trip search DFW -> JFK on 2025-10-04 ---")
+    ok, result = safe_search_trips("DFW", "JFK", "2025-10-04")
+    if not ok:
+        print("ERROR:", result)
+    else:
+        print(f"Direct: {len(result['direct'])} rows")
+        for r in result["direct"]:
+            print(f"  {r['First_flight_number']} {r['Origin_airport']}->{r['Destination_airport']} dep={r['First_departure_time']} arr={r['First_arrival_time']}")
+        print(f"Connections: {len(result['one_connection'])} rows")
+        for r in result["one_connection"]:
+            print(f"  {r['First_flight_number']} via {r['Connection_airport']} -> {r['Second_flight_number']}  dep={r['First_departure_time']} arr1={r['First_arrival_time']} dep2={r['Second_departure_time']}")
+
+    print("\n--- Trip search DFW -> MEX on 2025-10-04 ---")
+    ok, result = safe_search_trips("DFW", "MEX", "2025-10-04")
+    if not ok:
+        print("ERROR:", result)
+    else:
+        print(f"Direct: {len(result['direct'])} rows")
+        for r in result["direct"]:
+            print(f"  {r['First_flight_number']} dep={r['First_departure_time']} arr={r['First_arrival_time']}")
+        print(f"Connections: {len(result['one_connection'])} rows")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        _run_tests()
+    else:
+        main()
