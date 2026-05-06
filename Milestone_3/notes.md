@@ -1,6 +1,5 @@
 Flight Search:
-* a) test with DFW -> JFK 2025-10-04: DFW -> LGA -> JFK shows up but doesnt clear the mandatory 1 hour 
-* lines 95-101
+* ~~a) test with DFW -> JFK 2025-10-04: DFW -> LGA -> JFK shows up but doesnt clear the mandatory 1 hour~~
 * b) flight search and flight information should be the same tab
 * ~~Flight number should be prefixed with the airline information~~
 

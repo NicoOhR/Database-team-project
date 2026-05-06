@@ -292,6 +292,75 @@ def safe_get_passenger_itinerary(customer_lookup: str):
         return False, f"Error fetching itinerary: {exc}"
 
 
+def search_bookable_legs_by_airports(origin: str, dest: str, date: str) -> list[dict[str, Any]]:
+    return _fetch_all(
+        """
+        SELECT
+            li.Flight_number,
+            li.Leg_no,
+            li.Date,
+            fl.Dep_airport_code AS Dep_airport,
+            fl.Arr_airport_code AS Arr_airport,
+            li.Dep_time,
+            li.Arr_time,
+            li.No_of_avail_seats AS Avail_seats
+        FROM LEG_INSTANCE li
+        JOIN FLIGHT_LEG fl
+          ON fl.Flight_number = li.Flight_number
+         AND fl.Leg_no = li.Leg_no
+        WHERE fl.Dep_airport_code = %s
+          AND fl.Arr_airport_code = %s
+          AND li.Date = %s
+        ORDER BY li.Dep_time
+        """,
+        (origin, dest, date),
+    )
+
+
+def search_bookable_legs_by_flight(flight_number: str, date: str) -> list[dict[str, Any]]:
+    return _fetch_all(
+        """
+        SELECT
+            li.Flight_number,
+            li.Leg_no,
+            li.Date,
+            fl.Dep_airport_code AS Dep_airport,
+            fl.Arr_airport_code AS Arr_airport,
+            li.Dep_time,
+            li.Arr_time,
+            li.No_of_avail_seats AS Avail_seats
+        FROM LEG_INSTANCE li
+        JOIN FLIGHT_LEG fl
+          ON fl.Flight_number = li.Flight_number
+         AND fl.Leg_no = li.Leg_no
+        WHERE li.Flight_number = %s
+          AND li.Date = %s
+        ORDER BY li.Leg_no
+        """,
+        (flight_number, date),
+    )
+
+
+def safe_search_bookable_legs_by_airports(origin: str, dest: str, date: str):
+    try:
+        if len(origin) != 3 or len(dest) != 3:
+            return False, "Airport codes must be 3 letters."
+        if origin == dest:
+            return False, "Origin and destination cannot be the same."
+        return True, search_bookable_legs_by_airports(origin.upper(), dest.upper(), date)
+    except Error as exc:
+        return False, f"Error searching flights: {exc}"
+
+
+def safe_search_bookable_legs_by_flight(flight_number: str, date: str):
+    try:
+        if not flight_number.strip():
+            return False, "Flight number is required."
+        return True, search_bookable_legs_by_flight(flight_number.strip(), date)
+    except Error as exc:
+        return False, f"Error searching flights: {exc}"
+
+
 def safe_get_aircraft_utilization(registration_number: str, start_date: str, end_date: str):
     try:
         if not registration_number.strip():
