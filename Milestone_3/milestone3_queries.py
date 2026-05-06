@@ -200,7 +200,7 @@ def get_passenger_itinerary(customer_lookup: str) -> list[dict[str, Any]]:
              AND li.Leg_no = s.Leg_no
              AND li.Date = s.Date
             WHERE s.Cphone = %s
-            ORDER BY s.Date, li.Dep_time, s.Flight_number, s.Leg_no
+            ORDER BY s.Date, s.Flight_number, s.Leg_no
             """,
             (normalized_phone,),
         )
